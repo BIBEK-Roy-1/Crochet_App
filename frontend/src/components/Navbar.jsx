@@ -29,7 +29,7 @@ export default function Navbar({ onCartClick }) {
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2">
   <img
-    src="/src/assets/logo.png"
+    src="https://res.cloudinary.com/m3d5hd1r/image/upload/v1790621171/logo.png"
     alt="Meghla Crochet"
     className="h-20 w-20 object-contain"
   />
