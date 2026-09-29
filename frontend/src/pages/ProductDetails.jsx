@@ -1,4 +1,11 @@
-import { ArrowLeft, Minus, Plus, ShoppingBag, Zap } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Zap,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
@@ -7,7 +14,13 @@ import { formatPrice } from '../utils/formatPrice';
 export default function ProductDetails({ products, collections }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+
+  const {
+    cart,
+    addToCart,
+    removeFromCart,
+  } = useCart();
+
   const product = products.find((item) => item.id === id);
 
   const [selected, setSelected] = useState(0);
@@ -21,7 +34,9 @@ export default function ProductDetails({ products, collections }) {
     );
   }
 
-  const images = product.images?.length ? product.images : [product.image];
+  const images = product.images?.length
+    ? product.images
+    : [product.image];
 
   const collection = collections?.find(
     (c) => c.id === product.collectionId
@@ -34,6 +49,16 @@ export default function ProductDetails({ products, collections }) {
         item.collectionId === product.collectionId
     )
     .slice(0, 3);
+
+  const inCart = cart.some((item) => item.id === product.id);
+
+  const handleCartClick = () => {
+    if (inCart) {
+      removeFromCart(product.id);
+    } else {
+      addToCart(product, quantity);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#faf7f2] pb-24 pt-32">
@@ -134,7 +159,9 @@ export default function ProductDetails({ products, collections }) {
                 </span>
 
                 <button
-                  onClick={() => setQuantity((q) => q + 1)}
+                  onClick={() =>
+                    setQuantity((q) => q + 1)
+                  }
                   className="p-3"
                 >
                   <Plus className="h-4 w-4" />
@@ -145,45 +172,59 @@ export default function ProductDetails({ products, collections }) {
             {/* Action Buttons */}
             <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
 
+              {/* Add to Cart / In Cart */}
               <button
-                onClick={() => addToCart(product, quantity)}
-                className="flex items-center justify-center gap-2 rounded-full border border-[#c05640] bg-white px-7 py-4 font-medium text-[#c05640] hover:bg-[#c05640] hover:text-white"
+                onClick={handleCartClick}
+                className={`relative flex items-center justify-center gap-2 overflow-hidden rounded-full px-7 py-4 font-medium transition-all duration-300 ${
+                  inCart
+                    ? 'border border-[#849b79] bg-[#849b79] text-white shadow-sm'
+                    : 'border border-[#c05640] bg-white text-[#c05640] hover:bg-[#c05640] hover:text-white'
+                }`}
               >
-                <ShoppingBag className="h-5 w-5" />
-                Add to Cart
+                {inCart ? (
+                  <>
+                    <span className="cart-check-animation">
+                      <Check className="h-5 w-5" />
+                    </span>
+
+                    <span className="cart-text-animation">
+                      In Cart
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="h-5 w-5" />
+                    <span>Add to Cart</span>
+                  </>
+                )}
               </button>
 
+              {/* Buy Now */}
               <button
                 onClick={() =>
                   navigate(
                     `/buy-now/${product.id}?quantity=${quantity}`
                   )
                 }
-                className="flex items-center justify-center gap-2 rounded-full bg-[#c05640] px-7 py-4 font-medium text-white hover:bg-[#a64733]"
+                className="flex items-center justify-center gap-2 rounded-full bg-[#c05640] px-7 py-4 font-medium text-white transition hover:bg-[#a64733]"
               >
                 <Zap className="h-5 w-5" />
                 Buy Now
               </button>
-
             </div>
 
             {/*
               HEART / SAVE FOR LATER
-              ---------------------
+
               Temporarily disabled.
+              We can add this later when user-specific
+              login and wishlist functionality are implemented.
 
-              We can add this back later when
-              user-specific login and wishlist
-              functionality are implemented.
-
-              <button
-                className="mt-4 flex items-center gap-2 text-sm text-[#64748b] hover:text-[#c05640]"
-              >
+              <button className="mt-4 flex items-center gap-2 text-sm text-[#64748b] hover:text-[#c05640]">
                 <Heart className="h-4 w-4" />
                 Save for later
               </button>
             */}
-
           </div>
         </div>
 
@@ -227,8 +268,49 @@ export default function ProductDetails({ products, collections }) {
 
           </section>
         )}
-
       </div>
+
+      {/* Subtle Cart Animation */}
+      <style>
+        {`
+          .cart-check-animation {
+            display: inline-flex;
+            animation: cartCheck 0.35s ease-out;
+          }
+
+          .cart-text-animation {
+            animation: cartText 0.3s ease-out;
+          }
+
+          @keyframes cartCheck {
+            0% {
+              opacity: 0;
+              transform: scale(0.6);
+            }
+
+            70% {
+              transform: scale(1.12);
+            }
+
+            100% {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+
+          @keyframes cartText {
+            0% {
+              opacity: 0;
+              transform: translateY(4px);
+            }
+
+            100% {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}
+      </style>
     </main>
   );
 }

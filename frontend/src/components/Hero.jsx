@@ -1,5 +1,6 @@
-import { ArrowRight, Flower2, Wind } from 'lucide-react';
+import { ArrowRight, Flower2, Wind, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatPrice } from '../utils/formatPrice';
 
 export default function Hero({ highlightedProduct }) {
   return (
@@ -56,6 +57,7 @@ export default function Hero({ highlightedProduct }) {
 
         <div className="relative mt-10 lg:ml-10 lg:mt-0">
           <div className="absolute -inset-4 rotate-3 rounded-tl-[100px] rounded-br-[100px] bg-[#c05640] opacity-10" />
+
           <div className="kantha-border absolute -inset-4 -rotate-2 rounded-tl-[100px] rounded-br-[100px] border-2 border-[#849b79]" />
 
           <div className="relative aspect-[4/5] overflow-hidden rounded-tl-[80px] rounded-br-[80px] bg-white p-2 shadow-2xl">
@@ -71,15 +73,32 @@ export default function Hero({ highlightedProduct }) {
             <div className="absolute inset-0 rounded-tl-[72px] rounded-br-[72px] bg-gradient-to-t from-[#334155]/80 to-transparent" />
 
             <div className="absolute bottom-10 left-10 pr-4 text-white">
+
               <p className="font-serif-custom mb-1 text-2xl font-bold">
                 {highlightedProduct?.title || 'Handmade Comfort'}
               </p>
+
               <p className="text-sm text-[#cbd5e1]">
                 {highlightedProduct?.subtitle || 'Made slowly, meant to last.'}
               </p>
-              {highlightedProduct?.price && (
-                <p className="mt-2 font-medium">{highlightedProduct.price}</p>
+
+              {highlightedProduct?.price !== undefined && (
+                <p className="mt-2 font-medium">
+                  {formatPrice(highlightedProduct.price)}
+                </p>
               )}
+
+              {/* Buy Now */}
+              {highlightedProduct?.id && (
+                <Link
+                  to={`/product/${highlightedProduct.id}`}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[#c05640] shadow-md transition-all hover:bg-[#faf7f2] hover:shadow-lg"
+                >
+                  <Zap className="h-4 w-4" />
+                  Buy Now
+                </Link>
+              )}
+
             </div>
           </div>
         </div>
