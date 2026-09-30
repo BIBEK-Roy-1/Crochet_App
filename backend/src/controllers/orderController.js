@@ -9,7 +9,58 @@ const Product = require("../models/Product");
 
 const createWhatsAppOrder = async (req, res) => {
   try {
-    const { items } = req.body;
+    const {
+      items,
+      customerName,
+      deliveryType,
+      address,
+      pincode,
+    } = req.body;
+
+    // -----------------------------------------
+    // Validate customer name
+    // -----------------------------------------
+
+    if (!customerName || !customerName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer name is required",
+      });
+    }
+
+    // -----------------------------------------
+    // Validate delivery type
+    // -----------------------------------------
+
+    if (
+      !deliveryType ||
+      !["campus", "outside"].includes(deliveryType)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid delivery type",
+      });
+    }
+
+    // -----------------------------------------
+    // Validate outside-campus details
+    // -----------------------------------------
+
+    if (deliveryType === "outside") {
+      if (!address || !address.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Address is required",
+        });
+      }
+
+      if (!pincode || !/^\d{6}$/.test(String(pincode))) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid 6-digit PIN code is required",
+        });
+      }
+    }
 
     // -----------------------------------------
     // Validate items
@@ -73,7 +124,8 @@ const createWhatsAppOrder = async (req, res) => {
     // -----------------------------------------
 
     const orderItems = [];
-    let totalAmount = 0;
+
+    let subtotal = 0;
 
     for (const item of items) {
       const product = products.find(
@@ -92,7 +144,7 @@ const createWhatsAppOrder = async (req, res) => {
       const itemTotal =
         product.price * item.quantity;
 
-      totalAmount += itemTotal;
+      subtotal += itemTotal;
 
       orderItems.push({
         product: product._id,
@@ -103,17 +155,51 @@ const createWhatsAppOrder = async (req, res) => {
     }
 
     // -----------------------------------------
+    // Delivery charge
+    // -----------------------------------------
+
+    const deliveryCharge =
+      deliveryType === "outside" ? 55 : 0;
+
+    // -----------------------------------------
+    // Final total
+    // -----------------------------------------
+
+    const totalAmount =
+      subtotal + deliveryCharge;
+
+    // -----------------------------------------
     // Create order
     // -----------------------------------------
 
     const order = await Order.create({
       items: orderItems,
 
+      subtotal,
+
+      deliveryCharge,
+
       totalAmount,
 
       orderType: "whatsapp",
 
       status: "pending",
+
+      customer: {
+        name: customerName.trim(),
+      },
+
+      deliveryType,
+
+      address:
+        deliveryType === "outside"
+          ? address.trim()
+          : "",
+
+      pincode:
+        deliveryType === "outside"
+          ? String(pincode)
+          : "",
     });
 
     // -----------------------------------------
@@ -127,12 +213,29 @@ const createWhatsAppOrder = async (req, res) => {
       order: {
         id: order._id,
         items: order.items,
+
+        customer: order.customer,
+
+        deliveryType: order.deliveryType,
+
+        address: order.address,
+
+        pincode: order.pincode,
+
+        subtotal: order.subtotal,
+
+        deliveryCharge: order.deliveryCharge,
+
         totalAmount: order.totalAmount,
+
         orderType: order.orderType,
+
         status: order.status,
+
         createdAt: order.createdAt,
       },
     });
+
   } catch (error) {
     console.error(
       "Create WhatsApp order error:",
@@ -154,7 +257,10 @@ const createWhatsAppOrder = async (req, res) => {
 const getOrders = async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate("items.product", "title images price")
+      .populate(
+        "items.product",
+        "title images price"
+      )
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -162,6 +268,7 @@ const getOrders = async (req, res) => {
       count: orders.length,
       orders,
     });
+
   } catch (error) {
     console.error(
       "Get orders error:",
@@ -211,6 +318,7 @@ const getOrderById = async (req, res) => {
       success: true,
       order,
     });
+
   } catch (error) {
     console.error(
       "Get order error:",

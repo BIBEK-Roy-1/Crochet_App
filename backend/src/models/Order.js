@@ -44,6 +44,19 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    deliveryCharge: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+
     totalAmount: {
       type: Number,
       required: true,
@@ -87,6 +100,24 @@ const orderSchema = new mongoose.Schema(
         lowercase: true,
         default: "",
       },
+    },
+
+    deliveryType: {
+      type: String,
+      enum: ["campus", "outside"],
+      required: true,
+    },
+
+    address: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    pincode: {
+      type: String,
+      trim: true,
+      default: "",
     },
   },
   {

@@ -8,6 +8,7 @@ import {
   Link,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 
 import { useState } from "react";
@@ -15,6 +16,7 @@ import { useState } from "react";
 import { useCart } from "../context/CartContext";
 import { siteConfig } from "../config/site";
 import { orderService } from "../services/orderService";
+
 import {
   formatPrice,
   toPriceNumber,
@@ -22,34 +24,42 @@ import {
 
 export default function BuyNow({ products }) {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const { cart, clearCart } = useCart();
 
   const [ordering, setOrdering] = useState(false);
 
-  /*
-    TWO POSSIBILITIES:
+  const [deliveryType, setDeliveryType] = useState("campus");
 
-    1. /buy-now/:id
-       → Buy one specific product
+  const [customerName, setCustomerName] = useState("");
+  const [address, setAddress] = useState("");
+  const [pincode, setPincode] = useState("");
 
-    2. /buy-now
-       → Checkout everything in cart
-  */
+  // ==========================================
+  // BUILD ORDER ITEMS
+  // ==========================================
 
   let orderItems = [];
 
-  // ==========================================
-  // BUY ONE PRODUCT
-  // ==========================================
-
+  // Buy one specific product
   if (id) {
     const product = products.find(
       (item) => item.id === id
     );
 
     if (product) {
+      const requestedQuantity = Number(
+        searchParams.get("quantity")
+      );
+
+      const quantity =
+        Number.isInteger(requestedQuantity) &&
+        requestedQuantity > 0
+          ? requestedQuantity
+          : 1;
+
       orderItems = [
         {
           id: product.id,
@@ -60,64 +70,124 @@ export default function BuyNow({ products }) {
             product.images?.[0] ||
             product.image ||
             "",
-          quantity: 1,
+          quantity,
         },
       ];
     }
   }
 
-  // ==========================================
-  // CHECKOUT CART
-  // ==========================================
-
+  // Checkout cart
   else {
     orderItems = cart;
   }
 
   // ==========================================
-  // CALCULATE TOTAL
+  // CALCULATE SUBTOTAL
   // ==========================================
 
-  const total = orderItems.reduce(
-    (sum, item) => {
-      return (
-        sum +
-        toPriceNumber(item.price) *
-          item.quantity
-      );
-    },
+  const subtotal = orderItems.reduce(
+    (sum, item) =>
+      sum +
+      toPriceNumber(item.price) *
+        item.quantity,
     0
   );
+
+  // ==========================================
+  // DELIVERY CHARGE
+  // ==========================================
+
+  const deliveryCharge =
+    deliveryType === "outside" ? 55 : 0;
+
+  // ==========================================
+  // FINAL TOTAL
+  // ==========================================
+
+  const total =
+    subtotal + deliveryCharge;
 
   // ==========================================
   // WHATSAPP ORDER
   // ==========================================
 
   const handleWhatsAppOrder = async () => {
+    // Full name
+    if (!customerName.trim()) {
+      alert("Please enter your full name.");
+      return;
+    }
+
+    // Outside-campus address
+    if (
+      deliveryType === "outside" &&
+      !address.trim()
+    ) {
+      alert("Please enter your address.");
+      return;
+    }
+
+    // Outside-campus PIN
+    if (
+      deliveryType === "outside" &&
+      !/^\d{6}$/.test(pincode.trim())
+    ) {
+      alert("Please enter a valid 6-digit PIN code.");
+      return;
+    }
+
     try {
       setOrdering(true);
 
       // ----------------------------------------
-      // Save order in MongoDB
+      // SAVE ORDER IN MONGODB
       // ----------------------------------------
 
       const response =
-        await orderService.createWhatsAppOrder(
-          orderItems
-        );
+        await orderService.createWhatsAppOrder({
+          items: orderItems,
+          customerName: customerName.trim(),
+          deliveryType,
+          address:
+            deliveryType === "outside"
+              ? address.trim()
+              : "",
+          pincode:
+            deliveryType === "outside"
+              ? pincode.trim()
+              : "",
+        });
 
       const order = response.order;
 
       // ----------------------------------------
-      // Create WhatsApp message
+      // WHATSAPP MESSAGE
       // ----------------------------------------
 
+      const crochetEmoji =
+        String.fromCodePoint(0x1F9F6);
+
       const message = `
-Hello Meghla Crochet! 🧶
+Hello Meghla Crochet! ${crochetEmoji}
 
 I would like to place an order.
 
 Order ID: ${order.id}
+
+Customer Name: ${customerName.trim()}
+
+Delivery Type: ${
+        deliveryType === "outside"
+          ? "Not from campus"
+          : "On campus"
+      }
+
+${
+  deliveryType === "outside"
+    ? `Address: ${address.trim()}
+PIN Code: ${pincode.trim()}`
+    : "Delivery: On campus"
+}
 
 ${order.items
   .map(
@@ -131,9 +201,17 @@ Price: ₹${new Intl.NumberFormat(
   )
   .join("\n")}
 
+Subtotal: ₹${new Intl.NumberFormat(
+        "en-IN"
+      ).format(subtotal)}
+
+Delivery Charge: ₹${new Intl.NumberFormat(
+        "en-IN"
+      ).format(deliveryCharge)}
+
 Total: ₹${new Intl.NumberFormat(
         "en-IN"
-      ).format(order.totalAmount)}
+      ).format(total)}
 
 Please let me know the next steps.
       `.trim();
@@ -143,7 +221,7 @@ Please let me know the next steps.
         `?text=${encodeURIComponent(message)}`;
 
       // ----------------------------------------
-      // Clear cart when checking out cart
+      // CLEAR CART FOR CART CHECKOUT
       // ----------------------------------------
 
       if (!id && clearCart) {
@@ -151,10 +229,11 @@ Please let me know the next steps.
       }
 
       // ----------------------------------------
-      // Open WhatsApp
+      // OPEN WHATSAPP
       // ----------------------------------------
 
       window.location.href = whatsappUrl;
+
     } catch (error) {
       console.error(
         "WhatsApp order failed:",
@@ -165,6 +244,7 @@ Please let me know the next steps.
         error.message ||
           "Unable to create your order. Please try again."
       );
+
     } finally {
       setOrdering(false);
     }
@@ -193,7 +273,7 @@ Please let me know the next steps.
 
           <Link
             to="/collection"
-            className="mt-8 inline-block bg-[#c05640] px-7 py-3 font-medium text-white transition hover:bg-[#a64733]"
+            className="mt-8 inline-block rounded-full bg-[#c05640] px-7 py-3 font-medium text-white transition hover:bg-[#a64733]"
           >
             Explore Collection
           </Link>
@@ -213,10 +293,7 @@ Please let me know the next steps.
 
       <div className="mx-auto max-w-6xl">
 
-        {/* ======================================
-            BACK
-        ======================================= */}
-
+        {/* Back */}
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -245,18 +322,15 @@ Please let me know the next steps.
             </div>
 
             {/* Products */}
-
             <div className="mt-8 space-y-6">
 
               {orderItems.map((item) => (
-
                 <div
                   key={item.id}
                   className="flex gap-4 border-b border-[#eee4dc] pb-6"
                 >
 
                   {/* Image */}
-
                   <img
                     src={item.image}
                     alt={item.title}
@@ -264,7 +338,6 @@ Please let me know the next steps.
                   />
 
                   {/* Information */}
-
                   <div className="min-w-0 flex-1">
 
                     <h2 className="font-serif-custom text-xl font-bold text-[#334155]">
@@ -278,7 +351,6 @@ Please let me know the next steps.
                     )}
 
                     <div className="mt-4 flex justify-between text-sm">
-
                       <span className="text-gray-500">
                         Quantity
                       </span>
@@ -286,11 +358,9 @@ Please let me know the next steps.
                       <span className="font-medium">
                         {item.quantity}
                       </span>
-
                     </div>
 
                     <div className="mt-2 flex justify-between text-sm">
-
                       <span className="text-gray-500">
                         Price
                       </span>
@@ -298,51 +368,77 @@ Please let me know the next steps.
                       <span className="font-semibold text-[#c05640]">
                         {formatPrice(item.price)}
                       </span>
-
                     </div>
 
                     <div className="mt-2 flex justify-between text-sm">
-
                       <span className="text-gray-500">
                         Subtotal
                       </span>
 
                       <span className="font-medium text-[#334155]">
                         {formatPrice(
-                          toPriceNumber(
-                            item.price
-                          ) * item.quantity
+                          toPriceNumber(item.price) *
+                            item.quantity
                         )}
                       </span>
-
                     </div>
 
                   </div>
 
                 </div>
-
               ))}
 
             </div>
 
-            {/* Total */}
+            {/* Price Summary */}
+            <div className="mt-6 space-y-3 border-t border-[#ded2c8] pt-6">
 
-            <div className="mt-6 flex items-center justify-between border-t border-[#ded2c8] pt-6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">
+                  Products
+                </span>
 
-              <span className="text-lg font-medium text-[#334155]">
-                Total
-              </span>
+                <span className="font-medium">
+                  {formatPrice(subtotal)}
+                </span>
+              </div>
 
-              <span className="text-2xl font-bold text-[#c05640]">
-                {formatPrice(total)}
-              </span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">
+                  Delivery
+                </span>
+
+                <span
+                  className={
+                    deliveryType === "outside"
+                      ? "font-semibold text-[#c05640]"
+                      : "font-medium text-[#849b79]"
+                  }
+                >
+                  {deliveryType === "outside"
+                    ? formatPrice(deliveryCharge)
+                    : "Free"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+
+                <span className="text-lg font-medium text-[#334155]">
+                  Total
+                </span>
+
+                <span className="text-2xl font-bold text-[#c05640]">
+                  {formatPrice(total)}
+                </span>
+
+              </div>
 
             </div>
 
           </section>
 
           {/* ====================================
-              WHATSAPP CHECKOUT
+              CHECKOUT
           ===================================== */}
 
           <section className="flex flex-col justify-center rounded-3xl bg-white p-8 shadow-sm sm:p-10">
@@ -358,69 +454,190 @@ Please let me know the next steps.
               </h2>
 
               <p className="mt-4 leading-7 text-[#64748b]">
-                Continue to WhatsApp and send your
-                order directly to Meghla Crochet.
-                We'll confirm availability, delivery,
-                and payment details with you there.
+                Enter your details and continue to
+                WhatsApp to place your order.
               </p>
 
             </div>
 
-            {/* WhatsApp Card */}
+            {/* Customer Name */}
+            <div className="mt-8">
 
-            <div className="mt-8 rounded-2xl border border-[#ddd4ca] bg-[#faf7f2] p-5">
+              <label className="mb-2 block text-sm font-semibold text-[#334155]">
+                Full Name
+              </label>
 
-              <div className="flex items-center gap-4">
+              <input
+                type="text"
+                value={customerName}
+                onChange={(event) =>
+                  setCustomerName(event.target.value)
+                }
+                placeholder="Enter your full name"
+                className="w-full rounded-2xl border border-[#d7c9bd] bg-[#faf7f2] px-4 py-3 outline-none transition focus:border-[#c05640]"
+              />
 
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e4eee1] text-[#5b7f51]">
-                  <MessageCircle className="h-6 w-6" />
-                </div>
+            </div>
 
-                <div>
+            {/* Delivery Type */}
+            <div className="mt-7">
 
-                  <h3 className="font-semibold text-[#334155]">
-                    Order via WhatsApp
-                  </h3>
+              <p className="mb-3 text-sm font-semibold text-[#334155]">
+                Delivery location
+              </p>
 
-                  <p className="mt-1 text-sm text-[#64748b]">
-                    Your order details will be
-                    automatically filled in.
-                  </p>
+              <div className="space-y-3">
 
-                </div>
+                {/* On Campus */}
+                <label
+                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
+                    deliveryType === "campus"
+                      ? "border-[#849b79] bg-[#e4eee1]/50"
+                      : "border-[#ded4ca] bg-[#faf7f2]"
+                  }`}
+                >
+
+                  <input
+                    type="radio"
+                    name="deliveryType"
+                    value="campus"
+                    checked={deliveryType === "campus"}
+                    onChange={() =>
+                      setDeliveryType("campus")
+                    }
+                    className="accent-[#849b79]"
+                  />
+
+                  <div>
+                    <p className="font-medium text-[#334155]">
+                      Campus Delivery
+                    </p>
+
+                    <p className="mt-1 text-sm text-[#849b79]">
+                      No delivery charge
+                    </p>
+                  </div>
+
+                </label>
+
+                {/* Not From Campus */}
+                <label
+                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
+                    deliveryType === "outside"
+                      ? "border-[#c05640] bg-[#fff7f3]"
+                      : "border-[#ded4ca] bg-[#faf7f2]"
+                  }`}
+                >
+
+                  <input
+                    type="radio"
+                    name="deliveryType"
+                    value="outside"
+                    checked={deliveryType === "outside"}
+                    onChange={() =>
+                      setDeliveryType("outside")
+                    }
+                    className="accent-[#c05640]"
+                  />
+
+                  <div>
+                    <p className="font-medium text-[#334155]">
+                      Home Delivery
+                    </p>
+
+                    <p className="mt-1 text-sm text-[#c05640]">
+                      ₹55 delivery charge will be added
+                    </p>
+                  </div>
+
+                </label>
 
               </div>
 
             </div>
 
-            {/* WhatsApp Button */}
+            {/* Outside Campus Details */}
+            {deliveryType === "outside" && (
+              <div className="mt-5 space-y-4">
 
+                {/* Warning */}
+                <div className="rounded-2xl border border-[#ead4c9] bg-[#fff8f4] p-4 text-sm leading-6 text-[#9a6252]">
+                  A ₹55 delivery charge is added for
+                  orders outside campus.
+                </div>
+
+                {/* Address */}
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-[#334155]">
+                    Address
+                  </label>
+
+                  <textarea
+                    value={address}
+                    onChange={(event) =>
+                      setAddress(event.target.value)
+                    }
+                    placeholder="Enter your full delivery address"
+                    rows={3}
+                    className="w-full resize-none rounded-2xl border border-[#d7c9bd] bg-[#faf7f2] px-4 py-3 outline-none transition focus:border-[#c05640]"
+                  />
+
+                </div>
+
+                {/* PIN Code */}
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-[#334155]">
+                    PIN Code
+                  </label>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pincode}
+                    onChange={(event) =>
+                      setPincode(
+                        event.target.value.replace(
+                          /\D/g,
+                          ""
+                        )
+                      )
+                    }
+                    placeholder="6-digit PIN code"
+                    className="w-full rounded-2xl border border-[#d7c9bd] bg-[#faf7f2] px-4 py-3 outline-none transition focus:border-[#c05640]"
+                  />
+
+                </div>
+
+              </div>
+            )}
+
+            {/* WhatsApp Button */}
             <button
               type="button"
               onClick={handleWhatsAppOrder}
               disabled={ordering}
-              className="mt-6 flex w-full items-center justify-center gap-3 rounded-full bg-[#5b7f51] px-8 py-4 font-medium text-white transition hover:bg-[#496941] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-full bg-[#8f6f61] px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:bg-[#7b5d50] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
             >
 
               <MessageCircle className="h-5 w-5" />
 
               {ordering
                 ? "Preparing your order..."
-                : "Continue to WhatsApp"}
+                : "Order via WhatsApp"}
 
             </button>
 
-            <p className="mt-4 text-center text-xs leading-5 text-gray-400">
-              Your order will be saved before
-              WhatsApp opens.
+            <p className="mt-3 text-center text-xs text-gray-400">
+              Your order details will be filled in automatically.
             </p>
 
           </section>
 
         </div>
-
       </div>
-
     </main>
   );
 }
