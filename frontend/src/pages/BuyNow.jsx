@@ -560,12 +560,6 @@ Please let me know the next steps.
             {deliveryType === "outside" && (
               <div className="mt-5 space-y-4">
 
-                {/* Warning */}
-                <div className="rounded-2xl border border-[#ead4c9] bg-[#fff8f4] p-4 text-sm leading-6 text-[#9a6252]">
-                  A ₹55 delivery charge is added for
-                  orders outside campus.
-                </div>
-
                 {/* Address */}
                 <div>
 
